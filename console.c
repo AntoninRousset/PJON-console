@@ -50,13 +50,16 @@ int open_socket(const char *filename)
 		exit (EXIT_FAILURE);
 	}
 
+
 	struct sockaddr_un name;
 	memset(&name, 0, sizeof(name));
 	name.sun_family = AF_LOCAL;
 	name.sun_path[0] = '\0';
+	socklen_t size = strlen(name.sun_path);
+	bind(sock, (struct sockaddr*) &name, size);
+
 	strncpy(name.sun_path+1, filename, strlen(filename));
-	socklen_t size = offsetof(struct sockaddr_un, sun_path)
-				   + strlen(filename) + 1;
+	size = offsetof(struct sockaddr_un, sun_path) + strlen(filename) + 1;
 	if (connect(sock, (struct sockaddr*) &name, size) < 0) {
 		perror("connect");
 		exit(EXIT_FAILURE);
