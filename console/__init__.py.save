@@ -1,0 +1,91 @@
+#!/usr/bin/env python
+
+from .interface import Interface
+from asyncio import get_event_loop, wait, Event, ensure_future
+from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED
+import queue 
+import logging
+from logging.handlers import QueueHandler
+import sys
+
+class ConsoleBase:
+
+    def __init__(self, title):
+        self.interface = Interface(title=title)
+        self.queue = queue.Queue()
+        self.logger = self._create_logger()
+        self._stop_event = Event()
+
+    async def run(self):
+        fs = {
+                self.interface.run(),
+                self.proceed_inputs(),
+                self.listen_log(),
+                self._run_extra()
+                }
+        self.run_concurrent(fs)
+
+    async def proceed_inputs(self):
+        while True:
+            task_get = ensure_future(self.interface.get())
+            task_stop = ensure_future(self._stop_event.wait())
+            done, pending = await wait({task_get, task_stop},
+                    return_when=FIRST_COMPLETED)
+            for p in pending:
+                p.cancel()
+            if task_get in done: 
+                txt = await task_get
+                await self._exec_input(txt)
+
+    async def listen_log(self):
+        executor = ThreadPoolExecutor()
+        loop = get_event_loop()
+        while not self._stop_event.is_set():
+            log = await loop.run_in_executor(executor, self.queue.get)
+            msg = f'{log.asctime} : {log.msg}'
+            await self.interface.send(msg)
+
+    async def _run_extra(self):
+        from asyncio import sleep
+        while True:
+            await sleep(10)
+
+    async def _exec_input(self, msg):
+        pass
+
+    def _stop(self):
+        self._stop_event.set()
+        self.queue.put('STOP')
+
+    def _create_logger(self):
+        from tempfile import mktemp
+        logger = logging.getLogger('console')
+        logger.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s : %(message)s')
+
+        file_handler = logging.FileHandler('console.log')
+        file_handler.setFormatter(formatter)
+
+        queue_handler = QueueHandler(self.queue)
+        queue_handler.setFormatter(formatter)
+
+        logger.addHandler(file_handler)
+        logger.addHandler(queue_handler)
+
+        def handle_exception(exc_type, exc_value, exc_traceback):
+            exc_info = (exc_type, exc_value, exc_traceback)
+            logger.error("Uncaught exception", exc_info=exc_info)
+        sys.excepthook = handle_exception
+        return logger
+
+    async def run_concurrent(self, fs):
+        (done,),pending = await wait(fs, return_when=FIRST_COMPLETED)
+        e = done.exception()
+        try:
+            for p in pending:
+                p.cancel()
+        except BaseException as e:
+            self.logger.warning(f'Failed to cancel pending tasks: {e}')
+        if e:
+            raise e
+
