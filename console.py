@@ -14,10 +14,10 @@
  along with this program. If not, see <http://www.gnu.org/licenses/>.
 '''
 
-import signal
-from asyncio import get_event_loop, sleep
+from asyncio import get_event_loop
 from interface import Interface
 from PJON_daemon_client import listen, send, proto
+from signal import SIGWINCH
 
 
 def parse_user_input(user_input):
@@ -60,5 +60,5 @@ async def main(interface):
 if __name__ == '__main__':
     interface = Interface()
     loop = get_event_loop()
-    signal.signal(signal.SIGWINCH, lambda sig, action: interface.redraw())
+    loop.add_signal_handler(SIGWINCH, interface.redraw)
     loop.run_until_complete(main(interface))
