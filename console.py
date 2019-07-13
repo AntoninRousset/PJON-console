@@ -35,7 +35,7 @@ async def listen_pjon():
 
 
 async def send_message(line, dest, msg):
-    result = await send(dest, (msg).encode('ascii'))
+    result = await send(dest, (msg).encode('ascii') + b'\0')
     if result is proto.OutgoingResult.SUCCESS:
         line.color = 'green'
         line.content = line.content[:-len(' ...')]
