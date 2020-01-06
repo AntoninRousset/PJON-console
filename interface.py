@@ -132,12 +132,16 @@ class InputBox:
     def __init__(self, term, content=''):
         self.term = term
         self.cursor = len(content)
-        self.content = content
+        self.history = ['']
+        self.history_ptr = 0
 
     def handle_inkey(self, k):
         return {
             'KEY_LEFT': lambda k: self.move(-1),
             'KEY_RIGHT': lambda k: self.move(1),
+            'KEY_LEFT': lambda k: self.move(-1),
+            'KEY_UP': lambda k: self.jump_history(-1),
+            'KEY_DOWN': lambda k: self.jump_history(1),
             'KEY_ENTER': lambda k: self.send(),
             'KEY_DELETE': lambda k: self.remove(1)
 
@@ -149,6 +153,21 @@ class InputBox:
             # csr.term.KEY_SUP: above(csr, 10),
 
         }.get(k.name, lambda k: self.put(k))(str(k))
+
+    @property
+    def content(self):
+        return self.history[-1 - self.history_ptr]
+
+    @content.setter
+    def content(self, c):
+        self.history_ptr = 0
+        self.history[-1] = c
+
+    def jump_history(self, n):
+        self.history_ptr += n
+        self.history_ptr = min(self.history_ptr, len(self.history) - 1)
+        self.history_ptr = max(self.history_ptr, 0)
+        self.redraw()
 
     def put(self, s):
         if len(s) != 1 or ord(s) < ord(u' ') or ord(s) > ord('~'):
@@ -179,10 +198,15 @@ class InputBox:
 
     def send(self):
         content = self.content if len(self.content) > 0 else None
+        self.content = content
         self.content = ''
         self.cursor = 0
         self.redraw()
+        self.history.append('')
+        self.history_ptr = 0
         return content
+
+
 
 
 class Text:
